@@ -1,0 +1,11 @@
+# Netlify 部署設定檔
+[build]
+  publish = "."
+
+# 安全性與效能標頭設定
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

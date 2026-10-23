@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>太空英打防衛戰 - 26字母星際殲滅遊戲</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            space: {
+              dark: '#050711',
+              card: '#0D1326',
+              cyan: '#00F0FF',
+              neonPink: '#FF007F',
+              neonGreen: '#00FF66',
+              amber: '#FFB800',
+              purple: '#8B5CF6'
+            }
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', '"Fira Code"', 'Consolas', 'monospace'],
+            sans: ['"Noto Sans TC"', '"PingFang TC"', '"Microsoft JhengHei"', 'sans-serif'],
+            display: ['"Orbitron"', '"Noto Sans TC"', 'sans-serif']
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+              '50%': { opacity: '1', transform: 'scale(1.05)' }
+            },
+            laserFlicker: {
+              '0%, 100%': { opacity: '0.9' },
+              '50%': { opacity: '0.4' }
+            }
+          },
+          animation: {
+            pulseGlow: 'pulseGlow 2s infinite ease-in-out',
+            laserFlicker: 'laserFlicker 0.15s infinite'
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts (科技感字體與繁體中文) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
+
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+
+  <style>
+    [x-cloak] { display: none !important; }
+
+    /* 遊戲畫布與虛擬按鍵防觸控滾動 */
+    body {
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* 霓虹發光邊框特效 */
+    .neon-border-cyan {
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.4), inset 0 0 10px rgba(0, 240, 255, 0.2);
+    }
+    .neon-border-pink {
+      box-shadow: 0 0 15px rgba(255, 0, 127, 0.4), inset 0 0 10px rgba(255, 0, 127, 0.2);
+    }
+    .neon-border-green {
+      box-shadow: 0 0 15px rgba(0, 255, 102, 0.4), inset 0 0 10px rgba(0, 255, 102, 0.2);
+    }
+
+    /* 卷軸美化 */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #050711; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans overflow-hidden relative">
+
+  <!-- Alpine.js 應用主體 -->
+  <div x-data="spaceTypingGame()" x-init="initApp()" class="relative w-full h-screen flex flex-col justify-between overflow-hidden">
+
+    <!-- ==================== 1. 頂部星際指揮 HUD ==================== -->
+    <header class="w-full z-20 px-3 sm:px-6 py-2.5 bg-slate-950/80 backdrop-blur-md border-b border-cyan-500/30 flex items-center justify-between shadow-lg">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></div>
+        <div>
+          <h1 class="font-display font-black text-sm sm:text-xl tracking-wider bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-400 bg-clip-text text-transparent">
+            SPACE TYPER
+          </h1>
+          <span class="text-[10px] sm:text-xs text-cyan-400 font-bold tracking-widest hidden sm:inline">星際英打防衛戰</span>
+        </div>
+      </div>
+
+      <!-- 戰況數據展示區 (即時狀態：完成數 / 剩餘數 / 連擊 / 準確率) -->
+      <div class="flex items-center gap-2 sm:gap-5 text-xs sm:text-sm font-mono font-bold">
+        <!-- 完成數血條指標 -->
+        <div class="flex items-center gap-1.5 bg-slate-900/90 border border-emerald-500/40 px-2.5 py-1 rounded-xl">
+          <span class="text-emerald-400">已消滅</span>
+          <span class="text-base sm:text-lg text-emerald-300 font-black" x-text="completedCount"></span>
+          <span class="text-slate-500">/ 26</span>
+        </div>
+
+        <!-- 剩餘待打數量 -->
+        <div class="flex items-center gap-1.5 bg-slate-900/90 border border-amber-500/40 px-2.5 py-1 rounded-xl">
+          <span class="text-amber-400">待迎擊</span>
+          <span class="text-base sm:text-lg text-amber-300 font-black" x-text="remainingCount"></span>
+        </div>
+
+        <!-- 連擊數 (若大於1時顯示) -->
+        <div x-show="combo > 1" class="hidden md:flex items-center gap-1 bg-rose-500/20 border border-rose-500/40 px-2.5 py-1 rounded-xl animate-bounce">
+          <span>🔥</span>
+          <span class="text-rose-400 font-black" x-text="`${combo} COMBO`"></span>
+        </div>
+
+        <!-- 計時器 -->
+        <div class="bg-slate-900/90 border border-cyan-500/40 px-2.5 py-1 rounded-xl text-cyan-300 hidden sm:flex items-center gap-1">
+          <span>⏱️</span>
+          <span x-text="formatTime(elapsedSeconds)"></span>
+        </div>
+      </div>
+
+      <!-- 右側功能切換按鈕群 (音效 / 虛擬鍵盤切換 / 返回大廳) -->
+      <div class="flex items-center gap-2">
+        <a 
+          href="../index.html" 
+          class="p-2 sm:px-3 sm:py-1 rounded-lg text-xs font-bold border border-slate-700 bg-slate-900/90 text-slate-300 hover:text-cyan-300 hover:border-cyan-400 active:scale-95 transition-all flex items-center gap-1 shadow-sm"
+          title="返回遊戲大廳首頁">
+          <span>🏠</span>
+          <span class="hidden sm:inline">遊戲大廳</span>
+        </a>
+
+        <button 
+          @click="toggleSound()" 
+          type="button" 
+          class="p-2 sm:px-3 sm:py-1 rounded-lg text-xs font-bold border transition-all duration-150 active:scale-95 flex items-center gap-1"
+          :class="isSoundMuted ? 'border-rose-500/50 text-rose-400 bg-rose-950/30' : 'border-cyan-500/50 text-cyan-300 bg-cyan-950/30'">
+          <span x-text="isSoundMuted ? '🔇' : '🔊'"></span>
+          <span class="hidden sm:inline" x-text="isSoundMuted ? '靜音' : '音效開'"></span>
+        </button>
+
+        <button 
+          @click="showVirtualKeyboard = !showVirtualKeyboard" 
+          type="button" 
+          class="p-2 sm:px-3 sm:py-1 rounded-lg text-xs font-bold border border-slate-700 bg-slate-900/80 text-slate-300 hover:border-cyan-400 active:scale-95 transition-all flex items-center gap-1"
+          :class="{ 'border-cyan-400 text-cyan-300 bg-cyan-950/40': showVirtualKeyboard }"
+          title="切換螢幕觸控鍵盤">
+          <span>⌨️</span>
+          <span class="hidden sm:inline">虛擬鍵盤</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ==================== 2. 太空戰鬥畫布 (HTML5 Canvas 遊戲主體) ==================== -->
+    <div class="relative flex-1 w-full h-full overflow-hidden bg-black cursor-crosshair">
+      <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+      <!-- 底部防禦線警告燈條 (視覺化防呆與張力) -->
+      <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-80 pointer-events-none"></div>
+
+      <!-- 防線警告彈幕 (當有字母突破防線重新降落時) -->
+      <div 
+        x-show="showWarningBanner" 
+        x-transition:enter="transition ease-out duration-150"
+        x-transition:enter-start="opacity-0 -translate-y-4"
+        x-transition:enter-end="opacity-100 translate-y-0"
+        x-transition:leave="transition ease-in duration-150"
+        x-transition:leave-start="opacity-100 translate-y-0"
+        x-transition:leave-end="opacity-0 -translate-y-4"
+        class="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 pointer-events-none">
+        <div class="px-4 py-1.5 rounded-full bg-rose-600/90 border border-rose-400 text-white font-black text-xs sm:text-sm tracking-wider shadow-[0_0_20px_rgba(244,63,94,0.8)] flex items-center gap-2">
+          <span>⚠️</span>
+          <span>防線突破！未消滅字母將重新返回大氣層！</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 3. 虛擬螢幕鍵盤 (支援手機與平板觸控) ==================== -->
+    <div 
+      x-show="showVirtualKeyboard && gameState === 'playing'" 
+      x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="translate-y-full opacity-0"
+      x-transition:enter-end="translate-y-0 opacity-100"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="translate-y-0 opacity-100"
+      x-transition:leave-end="translate-y-full opacity-0"
+      class="z-20 w-full max-w-2xl mx-auto px-2 pb-2 pt-1 bg-slate-950/95 border-t border-cyan-500/30 backdrop-blur-md">
+      
+      <div class="space-y-1.5">
+        <!-- 第 1 排 (Q-P) -->
+        <div class="flex justify-center gap-1 sm:gap-1.5">
+          <template x-for="char in ['Q','W','E','R','T','Y','U','I','O','P']" :key="char">
+            <button 
+              @click="handleInputChar(char)" 
+              type="button" 
+              class="w-8 h-10 sm:w-12 sm:h-12 rounded-lg font-mono font-black text-sm sm:text-base border border-slate-700 bg-slate-900 text-cyan-300 hover:border-cyan-400 active:scale-90 active:bg-cyan-500 active:text-slate-950 transition-all flex items-center justify-center shadow">
+              <span x-text="char"></span>
+            </button>
+          </template>
+        </div>
+        <!-- 第 2 排 (A-L) -->
+        <div class="flex justify-center gap-1 sm:gap-1.5">
+          <template x-for="char in ['A','S','D','F','G','H','J','K','L']" :key="char">
+            <button 
+              @click="handleInputChar(char)" 
+              type="button" 
+              class="w-8 h-10 sm:w-12 sm:h-12 rounded-lg font-mono font-black text-sm sm:text-base border border-slate-700 bg-slate-900 text-cyan-300 hover:border-cyan-400 active:scale-90 active:bg-cyan-500 active:text-slate-950 transition-all flex items-center justify-center shadow">
+              <span x-text="char"></span>
+            </button>
+          </template>
+        </div>
+        <!-- 第 3 排 (Z-M) -->
+        <div class="flex justify-center gap-1 sm:gap-1.5">
+          <template x-for="char in ['Z','X','C','V','B','N','M']" :key="char">
+            <button 
+              @click="handleInputChar(char)" 
+              type="button" 
+              class="w-9 h-10 sm:w-12 sm:h-12 rounded-lg font-mono font-black text-sm sm:text-base border border-slate-700 bg-slate-900 text-cyan-300 hover:border-cyan-400 active:scale-90 active:bg-cyan-500 active:text-slate-950 transition-all flex items-center justify-center shadow">
+              <span x-text="char"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 4. 啟動畫面彈窗 (遊戲說明與開始按鈕) ==================== -->
+    <div 
+      x-show="gameState === 'start'" 
+      x-cloak 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+      
+      <div class="w-full max-w-md bg-slate-900/95 border-2 border-cyan-500/50 rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden shadow-[0_0_50px_rgba(0,240,255,0.25)]">
+        <!-- 裝飾光環 -->
+        <div class="absolute -top-20 -left-20 w-44 h-44 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-20 -right-20 w-44 h-44 bg-purple-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- 太空戰機標誌 -->
+        <div class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-4 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-4xl sm:text-5xl shadow-[0_0_25px_rgba(0,240,255,0.6)] transform -rotate-6">
+          🚀
+        </div>
+
+        <h2 class="font-display font-black text-2xl sm:text-3xl text-cyan-300 tracking-wider mb-2">太空英打防衛戰</h2>
+        <p class="text-slate-400 text-xs sm:text-sm font-medium mb-5">守護地球防線，擊落天降的 26 個星際字母！</p>
+
+        <!-- 遊戲說明 -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 text-left text-xs sm:text-sm space-y-2.5 mb-6">
+          <div class="font-bold text-cyan-400 flex items-center gap-1.5">
+            <span>📡</span> 作戰任務說明
+          </div>
+          <ul class="text-slate-300 space-y-2 list-disc list-inside leading-relaxed">
+            <li>天空中將隨機降落 <span class="text-cyan-300 font-bold">26 個英文字母</span>，降落速度各有快慢。</li>
+            <li>在鍵盤上敲擊對應字母，防衛戰機將發射高能雷射砲進行消滅。</li>
+            <li><span class="text-rose-400 font-bold">防禦防呆規則：</span>若字母抵達底線未被擊毀，將穿透並<span class="text-amber-300 font-bold">重新由頂空降落</span>，直到所有字母完全消滅為止！</li>
+            <li>即時統計「完成數」與「剩餘數」，全數打完即可通關結算！</li>
+          </ul>
+        </div>
+
+        <!-- 開始作戰按鈕 -->
+        <button 
+          @click="startBattle()" 
+          type="button" 
+          class="w-full py-4 px-6 rounded-2xl font-black text-lg sm:text-xl text-slate-950 tracking-wider bg-gradient-to-r from-cyan-400 via-sky-300 to-cyan-400 hover:from-cyan-300 hover:to-cyan-200 active:scale-95 transition-all shadow-[0_0_30px_rgba(0,240,255,0.5)] focus:outline-none focus:ring-4 focus:ring-cyan-400/50">
+          啟動戰機 ‧ 開始作戰
+        </button>
+
+        <!-- 返回大廳連結 -->
+        <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-center">
+          <a href="../index.html" class="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors font-medium">
+            <span>🏠</span>
+            <span>返回遊戲大廳首頁</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 5. 戰役結算畫面 (通關統計與再戰按鈕) ==================== -->
+    <div 
+      x-show="gameState === 'cleared'" 
+      x-cloak 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+      
+      <div class="w-full max-w-md bg-slate-900/95 border-2 border-emerald-500/50 rounded-3xl p-6 sm:p-8 text-center relative overflow-hidden shadow-[0_0_60px_rgba(16,185,129,0.3)]">
+        <!-- 勝利徽章 -->
+        <div class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-3 rounded-full bg-gradient-to-tr from-emerald-400 to-cyan-400 flex items-center justify-center text-4xl sm:text-5xl shadow-[0_0_30px_rgba(16,185,129,0.6)]">
+          🏆
+        </div>
+
+        <h2 class="font-display font-black text-2xl sm:text-3xl text-emerald-300 tracking-wider mb-1">防衛任務大獲全勝！</h2>
+        <p class="text-slate-400 text-xs sm:text-sm mb-5">26 個星際字母已全數殲滅，地球防線完好無損！</p>
+
+        <!-- 數據統計看板 -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-6 space-y-3 font-mono">
+          <div class="flex justify-between items-center text-sm py-1 border-b border-slate-800/80">
+            <span class="text-slate-400">總耗時</span>
+            <span class="text-cyan-300 font-bold text-lg" x-text="formatTime(elapsedSeconds)"></span>
+          </div>
+
+          <div class="flex justify-between items-center text-sm py-1 border-b border-slate-800/80">
+            <span class="text-slate-400">打字速率 (CPM)</span>
+            <span class="text-emerald-400 font-bold text-lg" x-text="calculateCPM()"></span>
+          </div>
+
+          <div class="flex justify-between items-center text-sm py-1 border-b border-slate-800/80">
+            <span class="text-slate-400">最高連擊數</span>
+            <span class="text-amber-400 font-bold text-lg" x-text="`${maxCombo} 連擊`"></span>
+          </div>
+
+          <div class="flex justify-between items-center text-sm py-1">
+            <span class="text-slate-400">漏打重降次數</span>
+            <span class="text-rose-400 font-bold text-lg" x-text="`${missCount} 次`"></span>
+          </div>
+        </div>
+
+        <!-- 稱號評語 -->
+        <div class="text-amber-300 font-bold text-sm mb-6 bg-amber-500/10 border border-amber-500/30 py-2 px-3 rounded-xl" x-text="getRating()"></div>
+
+        <!-- 操作按鈕 -->
+        <div class="flex flex-col sm:flex-row gap-2.5">
+          <button 
+            @click="startBattle()" 
+            type="button" 
+            class="flex-1 py-3 px-4 rounded-xl font-black text-slate-950 bg-gradient-to-r from-emerald-400 to-cyan-400 hover:from-emerald-300 hover:to-cyan-300 active:scale-95 transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] text-base">
+            再次出擊
+          </button>
+          <button 
+            @click="gameState = 'start'" 
+            type="button" 
+            class="py-3 px-4 rounded-xl font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 active:scale-95 transition-all border border-slate-700 text-sm">
+            回戰役說明
+          </button>
+          <a 
+            href="../index.html" 
+            class="py-3 px-4 rounded-xl font-bold text-cyan-300 bg-cyan-950/40 hover:bg-cyan-900/60 active:scale-95 transition-all border border-cyan-500/40 text-sm flex items-center justify-center gap-1.5 shadow-sm">
+            <span>🏠</span>
+            <span>返回大廳</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================== 模組邏輯區 ==================== -->
+  <script>
+    /**
+     * 1. 太空音效合成模組 (Web Audio API 零依賴實作)
+     * 嚴格遵守系統規範 2：PlaySound 函式不調用任何外部 .mp3
+     */
+    const SpaceSoundEngine = {
+      ctx: null,
+      isMuted: false,
+
+      init() {
+        if (!this.ctx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContextClass();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+
+      setMuted(muted) {
+        this.isMuted = muted;
+      },
+
+      play(type) {
+        if (this.isMuted) return;
+
+        try {
+          this.init();
+          const ctx = this.ctx;
+          const now = ctx.currentTime;
+
+          switch (type) {
+            case 'laser': {
+              // 疾速高能雷射射擊音 (高頻滑落至中低頻)
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sawtooth';
+              osc.frequency.setValueAtTime(880, now);
+              osc.frequency.exponentialRampToValueAtTime(120, now + 0.09);
+              gain.gain.setValueAtTime(0.3, now);
+              gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now);
+              osc.stop(now + 0.09);
+              break;
+            }
+
+            case 'explosion': {
+              // 爆炸碎裂低沉轟鳴音
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(140, now);
+              osc.frequency.exponentialRampToValueAtTime(30, now + 0.22);
+              gain.gain.setValueAtTime(0.4, now);
+              gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now);
+              osc.stop(now + 0.22);
+              break;
+            }
+
+            case 'shieldBounce': {
+              // 能量護盾防線反彈嗡鳴聲 (觸底重返)
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(220, now);
+              osc.frequency.linearRampToValueAtTime(440, now + 0.15);
+              gain.gain.setValueAtTime(0.25, now);
+              gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now);
+              osc.stop(now + 0.15);
+              break;
+            }
+
+            case 'errorKey': {
+              // 空發或打錯鍵警告音
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'square';
+              osc.frequency.setValueAtTime(130, now);
+              gain.gain.setValueAtTime(0.18, now);
+              gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now);
+              osc.stop(now + 0.08);
+              break;
+            }
+
+            case 'victory': {
+              // 勝利通關星際大勝琶音
+              const notes = [440, 554.37, 659.25, 880, 1108.73];
+              notes.forEach((freq, idx) => {
+                const noteTime = now + (idx * 0.08);
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, noteTime);
+                gain.gain.setValueAtTime(0.25, noteTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, noteTime + 0.4);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(noteTime);
+                osc.stop(noteTime + 0.4);
+              });
+              break;
+            }
+
+            case 'start': {
+              // 戰機引擎升壓音
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(150, now);
+              osc.frequency.exponentialRampToValueAtTime(600, now + 0.35);
+              gain.gain.setValueAtTime(0.3, now);
+              gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start(now);
+              osc.stop(now + 0.35);
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn('音效播放失敗:', e);
+        }
+      }
+    };
+
+    // 全域預留標準 PlaySound 函式
+    window.PlaySound = (type) => SpaceSoundEngine.play(type);
+
+    /**
+     * 2. Canvas 2D 太空射擊物理引擎 (SpaceCombatEngine)
+     */
+    class SpaceCombatEngine {
+      constructor(canvas, onMissCallback, onClearedCallback) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.onMissCallback = onMissCallback;
+        this.onClearedCallback = onClearedCallback;
+
+        this.isRunning = false;
+        this.stars = [];
+        this.fallingLetters = [];
+        this.waitingQueue = []; // 待升空降落的字母隊列
+        this.lasers = [];
+        this.explosions = [];
+
+        // 太空戰機底盤座標
+        this.ship = {
+          x: 0,
+          y: 0,
+          targetAngle: -Math.PI / 2,
+          currentAngle: -Math.PI / 2
+        };
+
+        this.initStars();
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+      }
+
+      resize() {
+        this.width = this.canvas.parentElement.clientWidth;
+        this.height = this.canvas.parentElement.clientHeight;
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+
+        this.ship.x = this.width / 2;
+        this.ship.y = this.height - 40;
+      }
+
+      initStars() {
+        this.stars = [];
+        for (let i = 0; i < 90; i++) {
+          this.stars.push({
+            x: Math.random() * (window.innerWidth || 800),
+            y: Math.random() * (window.innerHeight || 600),
+            size: Math.random() * 2 + 0.5,
+            speed: Math.random() * 1.5 + 0.4,
+            alpha: Math.random() * 0.7 + 0.3
+          });
+        }
+      }
+
+      // 重設並啟動 26 個字母對決
+      start(lettersArray) {
+        if (this.animationId) {
+          cancelAnimationFrame(this.animationId);
+          this.animationId = null;
+        }
+        this.isRunning = true;
+        this.fallingLetters = [];
+        this.lasers = [];
+        this.explosions = [];
+        this.waitingQueue = [...lettersArray]; // 26 個亂序字母
+
+        // 初始天空同時降落 4 ~ 5 個字母
+        const initialCount = Math.min(5, this.waitingQueue.length);
+        for (let i = 0; i < initialCount; i++) {
+          this.spawnLetter();
+        }
+
+        this.animationId = requestAnimationFrame((t) => this.gameLoop(t));
+      }
+
+      stop() {
+        this.isRunning = false;
+        if (this.animationId) {
+          cancelAnimationFrame(this.animationId);
+          this.animationId = null;
+        }
+      }
+
+      // 產生單一降落字母太空艙
+      spawnLetter(customChar = null) {
+        let char = customChar;
+        if (!char && this.waitingQueue.length > 0) {
+          char = this.waitingQueue.shift();
+        }
+        if (!char) return;
+
+        const padding = 50;
+        const x = padding + Math.random() * (this.width - padding * 2);
+        // 隨機落體速度 (1.0 ~ 2.6 px/frame)
+        const speed = 1.0 + Math.random() * 1.6;
+
+        const colors = ['#00F0FF', '#00FF66', '#FFB800', '#FF007F', '#A855F7'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+
+        this.fallingLetters.push({
+          char: char.toUpperCase(),
+          x: x,
+          y: -30 - Math.random() * 40,
+          speed: speed,
+          radius: 24,
+          color: color,
+          pulse: Math.random() * Math.PI,
+          wobble: (Math.random() - 0.5) * 0.8
+        });
+      }
+
+      // 鍵盤輸入比對與雷射擊發
+      shootLetter(char) {
+        if (!this.isRunning) return false;
+
+        // 搜尋目前空中是否有匹配的字母 (優先鎖定最接近底線/威脅最大的目標)
+        let targetIndex = -1;
+        let maxY = -9999;
+
+        for (let i = 0; i < this.fallingLetters.length; i++) {
+          const item = this.fallingLetters[i];
+          if (item.char === char && item.y > maxY) {
+            maxY = item.y;
+            targetIndex = i;
+          }
+        }
+
+        if (targetIndex !== -1) {
+          const target = this.fallingLetters[targetIndex];
+
+          // 戰機轉向鎖定
+          this.ship.targetAngle = Math.atan2(target.y - this.ship.y, target.x - this.ship.x);
+
+          // 產生光速雷射束
+          this.lasers.push({
+            startX: this.ship.x,
+            startY: this.ship.y,
+            targetX: target.x,
+            targetY: target.y,
+            currentX: this.ship.x,
+            currentY: this.ship.y,
+            color: '#00F0FF',
+            progress: 0
+          });
+
+          // 產生太空爆炸粒子
+          this.createExplosion(target.x, target.y, target.color);
+
+          // 移除被擊毀的字母
+          this.fallingLetters.splice(targetIndex, 1);
+
+          // 音效回饋
+          window.PlaySound('laser');
+          setTimeout(() => window.PlaySound('explosion'), 60);
+
+          // 若隊列中還有字母待降落，補進空中
+          if (this.waitingQueue.length > 0) {
+            this.spawnLetter();
+          }
+
+          // 檢查是否全部殲滅
+          if (this.fallingLetters.length === 0 && this.waitingQueue.length === 0) {
+            this.isRunning = false;
+            this.onClearedCallback();
+          }
+
+          return true;
+        }
+
+        return false;
+      }
+
+      createExplosion(x, y, color) {
+        const count = 28;
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 2 + Math.random() * 6;
+          this.explosions.push({
+            x: x,
+            y: y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: 2 + Math.random() * 4,
+            color: color,
+            alpha: 1,
+            decay: 0.02 + Math.random() * 0.03
+          });
+        }
+      }
+
+      // 遊戲主迴圈
+      gameLoop(currentTime) {
+        if (!this.isRunning) return;
+
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.width, this.height);
+
+        // 1. 繪製並滾動背景星空
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < this.stars.length; i++) {
+          const star = this.stars[i];
+          star.y += star.speed;
+          if (star.y > this.height) {
+            star.y = 0;
+            star.x = Math.random() * this.width;
+          }
+          ctx.save();
+          ctx.globalAlpha = star.alpha;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 2. 更新並繪製天降字母太空艙
+        const defenseLineY = this.height - 60;
+
+        for (let i = this.fallingLetters.length - 1; i >= 0; i--) {
+          const item = this.fallingLetters[i];
+          item.y += item.speed;
+          item.x += item.wobble * 0.5;
+          item.pulse += 0.05;
+
+          // 碰撞底線防呆規則：如果失敗沒有打到，重新再降落！
+          if (item.y >= defenseLineY) {
+            window.PlaySound('shieldBounce');
+            this.createExplosion(item.x, defenseLineY, '#F43F5E');
+
+            // 觸發重新降落：重設 Y 軸至頂部，並隨機換 X 位置與新速度
+            item.y = -35 - Math.random() * 40;
+            item.x = 40 + Math.random() * (this.width - 80);
+            item.speed = 1.0 + Math.random() * 1.6;
+
+            // 回呼 Alpine 更新漏打統計與警告橫幅
+            this.onMissCallback(item.char);
+            continue;
+          }
+
+          // 繪製字母艙本體與光暈
+          ctx.save();
+          ctx.translate(item.x, item.y);
+
+          // 外層能量防護罩環
+          ctx.beginPath();
+          ctx.arc(0, 0, item.radius + Math.sin(item.pulse) * 3, 0, Math.PI * 2);
+          ctx.strokeStyle = item.color;
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = item.color;
+          ctx.shadowBlur = 15;
+          ctx.stroke();
+
+          // 核心半透明暗座
+          ctx.beginPath();
+          ctx.arc(0, 0, item.radius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(13, 19, 38, 0.85)';
+          ctx.fill();
+
+          // 字母文字
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = '900 24px "Orbitron", "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(item.char, 0, 1);
+
+          ctx.restore();
+        }
+
+        // 3. 繪製雷射砲光束
+        for (let i = this.lasers.length - 1; i >= 0; i--) {
+          const l = this.lasers[i];
+          l.progress += 0.25;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(l.startX, l.startY);
+          ctx.lineTo(l.targetX, l.targetY);
+          ctx.strokeStyle = '#00F0FF';
+          ctx.lineWidth = 4;
+          ctx.shadowColor = '#00F0FF';
+          ctx.shadowBlur = 20;
+          ctx.stroke();
+          ctx.restore();
+
+          if (l.progress >= 1) {
+            this.lasers.splice(i, 1);
+          }
+        }
+
+        // 4. 繪製爆炸粒子
+        for (let i = this.explosions.length - 1; i >= 0; i--) {
+          const p = this.explosions[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.alpha -= p.decay;
+
+          if (p.alpha <= 0) {
+            this.explosions.splice(i, 1);
+            continue;
+          }
+
+          ctx.save();
+          ctx.globalAlpha = p.alpha;
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 5. 繪製底部防禦戰機
+        this.drawSpaceship(ctx);
+
+        this.animationId = requestAnimationFrame((t) => this.gameLoop(t));
+      }
+
+      // 繪製向量風格星際戰機
+      drawSpaceship(ctx) {
+        ctx.save();
+        ctx.translate(this.ship.x, this.ship.y);
+
+        // 平滑旋轉向目標角度
+        const angleDiff = this.ship.targetAngle - this.ship.currentAngle;
+        this.ship.currentAngle += angleDiff * 0.15;
+        ctx.rotate(this.ship.currentAngle + Math.PI / 2);
+
+        // 推進器火焰噴射特效
+        ctx.beginPath();
+        ctx.moveTo(-6, 20);
+        ctx.lineTo(0, 28 + Math.random() * 8);
+        ctx.lineTo(6, 20);
+        ctx.closePath();
+        ctx.fillStyle = '#00F0FF';
+        ctx.shadowColor = '#00F0FF';
+        ctx.shadowBlur = 15;
+        ctx.fill();
+
+        // 戰機機身本體
+        ctx.beginPath();
+        ctx.moveTo(0, -22); // 機尖
+        ctx.lineTo(16, 18);  // 右翼端
+        ctx.lineTo(6, 14);   // 右腰
+        ctx.lineTo(0, 18);   // 機尾中
+        ctx.lineTo(-6, 14);  // 左腰
+        ctx.lineTo(-16, 18); // 左翼端
+        ctx.closePath();
+
+        ctx.fillStyle = '#0F172A';
+        ctx.fill();
+        ctx.strokeStyle = '#00F0FF';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#00F0FF';
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+
+        // 駕駛艙晶片核心
+        ctx.beginPath();
+        ctx.arc(0, -2, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#FF007F';
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    /**
+     * 3. Alpine.js 應用主狀態機
+     */
+    function spaceTypingGame() {
+      return {
+        gameState: 'start', // 'start' | 'playing' | 'cleared'
+        combatEngine: null,
+
+        // 統計計數
+        totalLettersCount: 26,
+        completedCount: 0,
+        remainingCount: 26,
+        missCount: 0,
+        combo: 0,
+        maxCombo: 0,
+        totalKeystrokes: 0,
+        correctKeystrokes: 0,
+
+        // 計時器
+        elapsedSeconds: 0,
+        timerInterval: null,
+
+        // 介面與防呆狀態
+        showVirtualKeyboard: false,
+        showWarningBanner: false,
+        warningTimeoutId: null,
+        isSoundMuted: false,
+
+        initApp() {
+          const canvas = document.getElementById('gameCanvas');
+          this.combatEngine = new SpaceCombatEngine(
+            canvas,
+            // 漏打重降回呼
+            (missedChar) => {
+              this.missCount++;
+              this.combo = 0;
+              this.triggerWarningBanner();
+            },
+            // 通關結束回呼
+            () => {
+              this.finishBattle();
+            }
+          );
+
+          // 監聽全域實體鍵盤事件
+          window.addEventListener('keydown', (e) => {
+            if (this.gameState !== 'playing') return;
+            const key = e.key.toUpperCase();
+            if (/^[A-Z]$/.test(key)) {
+              this.handleInputChar(key);
+            }
+          });
+
+          // 自動偵測觸控螢幕設備預設開啟虛擬鍵盤
+          if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            this.showVirtualKeyboard = true;
+          }
+        },
+
+        toggleSound() {
+          this.isSoundMuted = !this.isSoundMuted;
+          SpaceSoundEngine.setMuted(this.isSoundMuted);
+          if (!this.isSoundMuted) {
+            window.PlaySound('laser');
+          }
+        },
+
+        // 開始新戰役
+        startBattle() {
+          window.PlaySound('start');
+          this.gameState = 'playing';
+
+          // 重設數據
+          this.completedCount = 0;
+          this.remainingCount = 26;
+          this.missCount = 0;
+          this.combo = 0;
+          this.maxCombo = 0;
+          this.totalKeystrokes = 0;
+          this.correctKeystrokes = 0;
+          this.elapsedSeconds = 0;
+
+          // 生成 26 個不重複字母隨機洗牌陣列
+          const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+          const shuffledLetters = alphabet.sort(() => 0.5 - Math.random());
+
+          // 啟動 Canvas 物理引擎
+          this.combatEngine.start(shuffledLetters);
+
+          // 啟動計時器
+          clearInterval(this.timerInterval);
+          this.timerInterval = setInterval(() => {
+            this.elapsedSeconds++;
+          }, 1000);
+        },
+
+        // 處理敲擊輸入 (實體鍵盤或虛擬鍵盤共用)
+        handleInputChar(char) {
+          if (this.gameState !== 'playing') return;
+
+          this.totalKeystrokes++;
+          const isHit = this.combatEngine.shootLetter(char);
+
+          if (isHit) {
+            this.correctKeystrokes++;
+            this.completedCount++;
+            this.remainingCount = Math.max(0, 26 - this.completedCount);
+
+            this.combo++;
+            if (this.combo > this.maxCombo) {
+              this.maxCombo = this.combo;
+            }
+          } else {
+            // 空擊或打錯
+            this.combo = 0;
+            window.PlaySound('errorKey');
+          }
+        },
+
+        // 突破防線警告提示
+        triggerWarningBanner() {
+          this.showWarningBanner = true;
+          clearTimeout(this.warningTimeoutId);
+          this.warningTimeoutId = setTimeout(() => {
+            this.showWarningBanner = false;
+          }, 2000);
+        },
+
+        // 戰役通關結束
+        finishBattle() {
+          clearInterval(this.timerInterval);
+          if (this.combatEngine) {
+            this.combatEngine.stop();
+          }
+          this.gameState = 'cleared';
+          window.PlaySound('victory');
+        },
+
+        // 格式化時間 (分:秒)
+        formatTime(sec) {
+          const m = Math.floor(sec / 60).toString().padStart(2, '0');
+          const s = (sec % 60).toString().padStart(2, '0');
+          return `${m}:${s}`;
+        },
+
+        // 計算打字速率 (CPM: 每分鐘擊字數)
+        calculateCPM() {
+          if (this.elapsedSeconds === 0) return 0;
+          const minutes = this.elapsedSeconds / 60;
+          return Math.round(this.correctKeystrokes / minutes);
+        },
+
+        // 取得戰役評語與稱號
+        getRating() {
+          const cpm = this.calculateCPM();
+          if (cpm >= 120 && this.missCount === 0) {
+            return '🌟 傳奇星際神射手：零失誤完美防衛，速度凌厲超凡！';
+          } else if (cpm >= 80) {
+            return '🚀 菁英戰機領航員：反應極其敏捷，精準捍衛空域！';
+          } else if (cpm >= 50) {
+            return '🛰️ 合格太空巡防官：順利完成任務，持續練習定能更加神準！';
+          } else {
+            return '🌱 星際新進防衛兵：克服天降險境，再接再厲熟悉鍵盤方位！';
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>
